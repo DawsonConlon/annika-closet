@@ -1,5 +1,7 @@
 # Annika's Closet
 
+> **Status as of 2026-07-15:** Phases 1 and 2 are complete and verified. The app works end to end, for free, at `localhost:3000`. Version one is pushed to https://github.com/DawsonConlon/annika-closet. Next up is Phase 3 (deploy to Vercel), but the more valuable next step is testing on real photos of real clothes. Jump to [Where Things Stand](#where-things-stand) for the handoff details.
+
 ## The Problem
 
 Annika owns clothes she likes. Despite this, getting dressed is a chore, because the only way to find out whether an outfit works is to physically put it on. That means undressing, dressing, looking in a mirror, deciding no, and starting over. The cost of evaluating one outfit is high enough that most of her wardrobe never gets evaluated at all. She wears the small set of combinations she already knows work, and the rest of the closet sits unused.
@@ -55,7 +57,7 @@ Because the try on happens on someone else's GPU, our backend is a thin relay of
 
 What remains is roughly ninety percent user interface, so the stack should be chosen for interface quality. Python's options are weak here. Streamlit and Gradio build fast but look like internal data tools, re-run the whole script on every interaction, and treat mobile as an afterthought. Flask with templates gives full control of the HTML, but every interactive piece, the drag and drop upload, the preview before sending, the spinner that survives a twenty second render, the swipe between results on a phone, gets hand written in vanilla JavaScript. The JavaScript gets written either way. The only question is whether it gets written with tooling or without.
 
-Next.js gives one codebase for both the interface and the API route, Google ships a first class JavaScript SDK, phone first layout is the default rather than a fight, and it deploys free to Vercel.
+Next.js gives one codebase for both the interface and the API route, the try on Space has a first class JavaScript client, phone first layout is the default rather than a fight, and it deploys free to Vercel.
 
 If we ever self host the try on model rather than calling a hosted one, Python comes back into play for that service specifically. That exit ramp stays open.
 
@@ -80,6 +82,68 @@ This is deliberately smaller than the actual problem, which is full outfits. The
 **Phase 3: Deploy.** Push to Vercel, get the private link, hand it over.
 
 Phases 4 and beyond stay unscoped on purpose. Full outfits, a persistent closet with categories, and saved looks are all obvious next steps, but which one matters depends on what she actually complains about first.
+
+## Where Things Stand
+
+Everything below is written for whoever picks this up next, human or AI, with no memory of how it got here.
+
+### What is done
+
+Phases 1 and 2 are complete. The app runs locally, accepts two photos, produces a real try on image, and displays it. This was verified by driving an actual headless browser through the whole flow, not by unit tests: upload both photos, tap the button, wait for the result to render, confirm zero console errors. It took about twenty five seconds and cost nothing.
+
+Version one is committed and pushed to https://github.com/DawsonConlon/annika-closet (public, `main` branch). The repo is standalone; it is not part of the parent `claude_code` repo it sits inside.
+
+### The code
+
+Five files matter. Everything else is scaffold.
+
+| File | What it is |
+|---|---|
+| `frontend/app/page.tsx` | The entire screen. Holds the two photos and the result in React state, calls the API, renders the four result states (idle, generating, done, error). |
+| `frontend/components/PhotoSlot.tsx` | One upload card. Used twice, once per photo. Hides a file input behind a tappable card. |
+| `frontend/app/api/tryon/route.ts` | The entire backend. Roughly fifty lines. Receives both photos, calls the Space, returns the image as a data URL. |
+| `frontend/app/globals.css` | Design tokens (colors, fonts) as Tailwind v4 `@theme` variables. Change a color here, it changes everywhere. |
+| `frontend/app/layout.tsx` | Page shell. Loads the two Google Fonts. |
+
+The owner has never written React or TypeScript before. The code is commented accordingly, explaining React concepts where they appear rather than assuming them. Keep that up. Explain, do not just do.
+
+### Running it
+
+```bash
+cd frontend
+npm install
+npm run dev     # http://localhost:3000
+```
+
+No API key needed. `frontend/.env.local` is gitignored and holds two optional settings, both documented in `frontend/.env.example`: `HF_TOKEN` (a free Hugging Face token that raises the GPU quota) and `TRYON_SPACE` (swap in a different model).
+
+### How the try on call actually works
+
+The Space is a Gradio app, called through `@gradio/client`. Details that are not guessable and cost time to rediscover:
+
+- The endpoint is `/tryon`. Its first parameter is named `dict` and expects `{ background: <person image>, layers: [], composite: null }`, because the Space's UI uses an image editor widget. The garment goes in separately as `garm_img`.
+- The JS client option for auth is `token`, **not** `hf_token`. The Python client uses the other name. The types in `node_modules/@gradio/client/dist/types.d.ts` are the source of truth.
+- It returns a two item array: `[try on image, masked debug image]`. Each is an object with a `url`. We fetch the first and inline it as base64 so the browser never talks to the Space directly.
+- `garment_des` is a text description of the garment. We send a generic string rather than asking the user for one, because the whole design premise is no forms. If garment fidelity disappoints, this is the first knob to turn.
+- An `IndexError` from the Space means its pose detector found no person in the photo. This is the most common real failure and is already translated into a plain language message.
+
+### Gotchas in this environment
+
+Learned the hard way. Do not rediscover them.
+
+- **macOS has no `timeout` command.** Poll in a bash loop instead.
+- **`chromium-cli` is not installed.** Use Playwright directly: `npx playwright install chromium` first, since no browser is present by default.
+- **Playwright resolves modules from the script's location**, not the working directory. Install it next to any driver script, not in the project.
+- **Google's free tier reports `limit: 0` for image models.** Confirmed empirically. Do not trust blog posts claiming five hundred free images per day.
+- **The Next.js scaffold ships an `AGENTS.md`** warning that this version may differ from training data, with real docs in `node_modules/next/dist/docs/`. Read those before writing Next.js code. In practice the conventions used here were unchanged.
+
+### What to do next
+
+In priority order:
+
+1. **Test on real photos.** This is the open question the whole project rests on and it is now free to answer. Everything else is premature until it is answered.
+2. **Phase 3: deploy to Vercel** for the private link. Note the Vercel free tier caps a request at sixty seconds and try ons take about twenty five, so there is headroom but not a lot. If it gets tight, move to polling rather than blocking.
+3. **Revisit the privacy call before Annika uses it.** The open link with no password was chosen deliberately, but it was chosen before the app was real. See the Access section above.
 
 ## Assumptions I Am Making
 
