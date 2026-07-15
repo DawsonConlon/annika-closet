@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/*
+  Design tokens for the whole app. Tailwind v4 reads these from the
+  @theme block, which turns each one into utility classes, so
+  --color-rose becomes usable as bg-rose, text-rose, border-rose, etc.
+  Change a value here and it changes everywhere at once.
+*/
+@theme {
+  --color-blush: #fdf2f8; /* page background, a barely-there pink */
+  --color-ink: #0f172a; /* near-black text */
+  --color-rose: #be185d; /* primary brand color, deep rose */
+  --color-rose-dark: #9d174d; /* pressed/hover state of the rose */
+  --color-petal: #f7e3eb; /* soft borders and dividers */
+  --color-faint: #9f8592; /* muted secondary text, kept readable on blush */
+
+  --font-display: var(--font-cormorant);
+  --font-sans: var(--font-montserrat);
+}
+
+body {
+  background: var(--color-blush);
+  color: var(--color-ink);
+  font-family: var(--font-sans), sans-serif;
+}
